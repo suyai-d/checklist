@@ -6,14 +6,11 @@ import base64
 st.set_page_config(page_title="Checklist Pre-Campaña JD | Conci", layout="wide", page_icon="🚜")
 
 
-# --- FUNCIÓN PARA LOGOS EN CABECERA (HTML/CSS) ---
+# --- FUNCIÓN PARA LOGOS EN CABECERA ---
 def render_header():
-    # Nota: Asegurate de queCSC.png y JD.png estén en la misma carpeta que el script
     try:
-        # CSC Logo (Izquierda)
         with open("CSC.png", "rb") as f:
             csc_encoded = base64.b64encode(f.read()).decode()
-        # JD Logo (Derecha)
         with open("JD.png", "rb") as f:
             jd_encoded = base64.b64encode(f.read()).decode()
 
@@ -26,11 +23,9 @@ def render_header():
         """
         st.markdown(header_html, unsafe_allow_html=True)
     except FileNotFoundError:
-        st.error("⚠️ No encontré CSC.png o JD.png en la carpeta del script. Por favor, agregalos para ver los logos.")
-        st.title("Reporte Técnico Checklist")  # Fallback title
+        st.title("Reporte Técnico Checklist")
 
 
-# Estilos CSS generales para componentes
 st.markdown("""
     <style>
     .metric-container {
@@ -42,65 +37,57 @@ st.markdown("""
         margin-bottom: 20px;
         box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
     }
-    .main .block-container { padding-top: 1rem; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CABECERA CON LOGOS ---
 render_header()
 
 # --- SIDEBAR ---
-st.sidebar.header("Configuración del Reporte ⚙️")
+st.sidebar.header("Configuración ⚙️")
 uploaded_file = st.sidebar.file_uploader("Subí el Excel de Emparejamientos", type=["xlsx"])
-razon_social = st.sidebar.text_input("Razón Social del Cliente", placeholder="Ej: ADJ SRL")
+razon_social = st.sidebar.text_input("Razón Social del Cliente")
 fecha_control = st.sidebar.date_input("Fecha de Control")
 
-# --- CUERPO PRINCIPAL ---
-# Título ya está en el header renderizado
-
-# Datos de Cliente y Fecha
 if razon_social:
     st.info(f"📋 **Cliente:** {razon_social}  |  📆 **Fecha de Control:** {fecha_control.strftime('%d/%m/%Y')}")
 
 if uploaded_file is not None:
-    # Cargar datos
     df = pd.read_excel(uploaded_file, sheet_name="Emparejamientos")
     df.columns = df.columns.str.strip()
     equipos = df['Nombre de emparejamiento'].dropna().unique()
     total_equipos = len(equipos)
 
-    # --- LÓGICA DE CÁLCULO PARA INDICADORES ---
+    # --- LÓGICA DE CÁLCULO ---
     puntos_totales_act = 0
     puntos_logrados_act = 0
     maquinas_con_monitoreo = 0
 
     for i in range(total_equipos):
-        # 1. Monitor (1 punto si existe)
-        est_m = st.session_state.get(f"sel_m_{i}", "⚪ Sin comp.")
+        # 1. Monitor
+        est_m = st.session_state.get(f"sel_m_{i}", "❌ Desactualizado")
         if "Actualizado" in est_m:
             puntos_totales_act += 1
             puntos_logrados_act += 1
         elif "Desactualizado" in est_m:
             puntos_totales_act += 1
 
-        # 2. Receptor (1 punto si existe)
-        est_r = st.session_state.get(f"sel_r_{i}", "⚪ Sin comp.")
+        # 2. Receptor
+        est_r = st.session_state.get(f"sel_r_{i}", "❌ Desactualizado")
         if "Actualizado" in est_r:
             puntos_totales_act += 1
             puntos_logrados_act += 1
         elif "Desactualizado" in est_r:
             puntos_totales_act += 1
 
-        # 3. Unidades de Control (N puntos ponderados)
+        # 3. Unidades de Control
         cant_uc = st.session_state.get(f"uc_{i}", 0)
-        est_g = st.session_state.get(f"eg_{i}", "⚪ No posee")
-
+        est_g = st.session_state.get(f"eg_{i}", "❌ Desactualizado")
         if "No posee" not in est_g and cant_uc > 0:
             puntos_totales_act += cant_uc
             if "Actualizado" in est_g:
                 puntos_logrados_act += cant_uc
 
-        # 4. Monitoreo (Sobre total absoluto)
+        # 4. Monitoreo
         paq_m = st.session_state.get(f"pm_{i}", "⚪ No posee")
         if "Vigente" in paq_m:
             maquinas_con_monitoreo += 1
@@ -108,53 +95,50 @@ if uploaded_file is not None:
     pct_actualizacion = (puntos_logrados_act / puntos_totales_act * 100) if puntos_totales_act > 0 else 0
     pct_monitoreo = (maquinas_con_monitoreo / total_equipos * 100) if total_equipos > 0 else 0
 
+    # --- TERMÓMETROS ---
+    c_ind1, c_ind2 = st.columns(2)
 
-    # --- FUNCION COLOR SEMÁFORO ---
+
     def get_color_hex(pct):
         if pct < 60:
-            return "#FF4B4B"  # Rojo
+            return "#FF4B4B"
         elif pct < 80:
-            return "#FFBD45"  # Amarillo
+            return "#FFBD45"
         else:
-            return "#09AB3B"  # Verde
+            return "#09AB3B"
 
 
-    # --- RENDER DE TERMÓMETROS (INDICADORES) ---
-    c_ind1, c_ind2 = st.columns(2)
     with c_ind1:
-        color_act = get_color_hex(pct_actualizacion)
-        st.markdown(f"""<div class="metric-container">
-            <h4>🌡️ Salud de Software (Componentes + UC)</h4>
-            <h2 style="color:{color_act}">{pct_actualizacion:.1f}%</h2>
-            <p style="font-size: 0.8em">{puntos_logrados_act} de {puntos_totales_act} puntos de actualización</p>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="metric-container"><h4>🌡️ Estado Gral de los Componentes</h4><h2 style="color:{get_color_hex(pct_actualizacion)}">{pct_actualizacion:.1f}%</h2></div>',
+            unsafe_allow_html=True)
         st.progress(pct_actualizacion / 100)
-
     with c_ind2:
-        color_mon = get_color_hex(pct_monitoreo)
-        st.markdown(f"""<div class="metric-container">
-            <h4>📡 Cobertura de Monitoreo JDLink</h4>
-            <h2 style="color:{color_mon}">{pct_monitoreo:.1f}%</h2>
-            <p style="font-size: 0.8em">{maquinas_con_monitoreo} de {total_equipos} máquinas conectadas</p>
-        </div>""", unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="metric-container"><h4>📡 Máquinas con paquete de Monitoreo del CSC</h4><h2 style="color:{get_color_hex(pct_monitoreo)}">{pct_monitoreo:.1f}%</h2></div>',
+            unsafe_allow_html=True)
         st.progress(pct_monitoreo / 100)
 
     st.markdown("---")
 
-    # --- TABLA DE EDICIÓN ---
+    # --- TABLA ---
     anchos = [1.2, 0.8, 0.8, 1, 0.8, 0.8, 1, 0.8, 1.1, 1.1]
     cols_h = st.columns(anchos)
-    headers = ["Equipo", "Monitor", "Soft. M", "Estado M", "Receptor", "Soft. R", "Estado R", "Cant. UC", "Estado Gral",
-               "Paq. Monit"]
-    for col, text in zip(cols_h, headers): col.write(f"**{text}**")
+    for col, text in zip(cols_h,
+                         ["Equipo", "Monitor", "Soft. M", "Estado M", "Receptor", "Soft. R", "Estado R", "Cant. UC",
+                          "Estado Gral", "Paq. Monit"]):
+        col.write(f"**{text}**")
 
     st.markdown("---")
+
+    opciones_est = ["❌ Desactualizado", "✅ Actualizado", "⚪ Sin comp."]
+    # Nueva lista de opciones para monitoreo
+    opciones_paq = ["⚪ No posee", "🟢 Vigente", "🟡 Por Vencer", "🔴 Vencido"]
 
     for i, equipo in enumerate(equipos):
         info_equipo = df[df['Nombre de emparejamiento'] == equipo]
         sn_maquina = info_equipo['Número de serie de emparejamiento'].iloc[0]
 
-        # Extracción de datos
         mon_info = info_equipo[info_equipo['Tipo'].str.contains('Monitor', case=False, na=False)]
         mod_mon = mon_info['Modelo'].iloc[0] if not mon_info.empty else "N/D"
         sw_mon = mon_info['Versión de software'].iloc[0] if not mon_info.empty else "-"
@@ -163,29 +147,37 @@ if uploaded_file is not None:
         mod_rec = rec_info['Modelo'].iloc[0] if not rec_info.empty else "N/D"
         sw_rec = rec_info['Versión de software'].iloc[0] if not rec_info.empty else "-"
 
-        # FILA DE DATOS (Las 10 columnas)
         c = st.columns(anchos)
         with c[0]:
             st.write(f"**{equipo}**")
             st.caption(f"{sn_maquina}")
         with c[1]: st.write(mod_mon)
         with c[2]: st.write(sw_mon)
-        with c[3]: st.selectbox(f"m_{i}", ["✅ Actualizado", "❌ Desactualizado", "⚪ Sin comp."],
-                                index=(2 if mod_mon == "N/D" else 0), label_visibility="collapsed", key=f"sel_m_{i}")
+
+        # Estado Monitor: Comienza en Desactualizado (0) o Sin comp (2)
+        with c[3]:
+            def_m = 2 if mod_mon == "N/D" else 0
+            st.selectbox(f"m_{i}", opciones_est, index=def_m, label_visibility="collapsed", key=f"sel_m_{i}")
+
         with c[4]: st.write(mod_rec)
         with c[5]: st.write(sw_rec)
-        with c[6]: st.selectbox(f"r_{i}", ["✅ Actualizado", "❌ Desactualizado", "⚪ Sin comp."],
-                                index=(2 if mod_rec == "N/D" else 0), label_visibility="collapsed", key=f"sel_r_{i}")
 
-        # Columnas editables
+        # Estado Receptor: Comienza en Desactualizado (0) o Sin comp (2)
+        with c[6]:
+            def_r = 2 if mod_rec == "N/D" else 0
+            st.selectbox(f"r_{i}", opciones_est, index=def_r, label_visibility="collapsed", key=f"sel_r_{i}")
+
         with c[7]: st.number_input(f"uc_{i}", min_value=0, step=1, label_visibility="collapsed", key=f"uc_{i}")
-        with c[8]: st.selectbox(f"eg_{i}", ["✅ Actualizado", "❌ Desactualizado", "⚪ No posee"], index=0,
+
+        # Estado General UC: Comienza en Desactualizado (0)
+        with c[8]: st.selectbox(f"eg_{i}", ["❌ Desactualizado", "✅ Actualizado", "⚪ No posee"], index=0,
                                 label_visibility="collapsed", key=f"eg_{i}")
-        with c[9]: st.selectbox(f"pm_{i}", ["🟢 Vigente", "🔴 Vencido", "⚪ No posee"], index=2,
-                                label_visibility="collapsed", key=f"pm_{i}")
+
+        # Paquete Monitoreo: Comienza en No Posee (index 0) y tiene "Por Vencer"
+        with c[9]: st.selectbox(f"pm_{i}", opciones_paq, index=0, label_visibility="collapsed", key=f"pm_{i}")
 
         st.markdown("<hr style='margin:0; opacity:0.1'>", unsafe_allow_html=True)
 
-
+    st.button("🔄 Recalcular")
 else:
-    st.info("👋 Por favor, cargá el Excel de Emparejamientos desde el panel lateral para activar el checklist.")
+    st.info("👋 Cargá el Excel para empezar.")
